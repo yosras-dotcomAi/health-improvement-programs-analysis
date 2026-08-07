@@ -1,45 +1,19 @@
-# -health-improving-programs
-import csv
+# Healthcare Data Basics
 
-# Questionnaire questions
-questions = [
-    "Department: ",
-    "Position/Role: ",
-    "Years of experience in healthcare: ",
-    "Are you aware of any current staff health or wellness programs in the hospital? (Yes/No): ",
-    "If yes, which programs have you participated in? (e.g., Fitness, Nutrition, Stress Management): ",
-    "How often do you participate in these programs? (Regularly/Occasionally/Rarely/Never): ",
-    "How effective do you find the current health programs? (Very effective/Somewhat effective/Neutral/Not effective): ",
-    "What benefits have you noticed from participating? (e.g., Better health, Less stress, Work-life balance): ",
-    "What types of health-improving programs would you like the hospital to provide in the future?: ",
-    "What barriers prevent you from participating? (Time, Awareness, Schedule, Options, Other): "
-]
+## 📋 نظرة عامة
+مشروع تدريبي لتطبيق أساسيات تحليل البيانات على بيانات صحية حقيقية، كجزء من رحلتي للانتقال من التمريض إلى تحليل البيانات الصحية.
 
-# CSV file setup
-filename = "staff_health_survey_responses.csv"
+## 🎯 الهدف
+تطبيق مهارات Python وتحليل البيانات على سيناريوهات صحية واقعية — تنظيف البيانات، الاستكشاف، والتصور البياني.
 
-# Create CSV file with headers if it doesn’t exist
-with open(filename, "a", newline="", encoding="utf-8") as file:
-    writer = csv.writer(file)
-    if file.tell() == 0:  # Only add header once
-        writer.writerow([f"Q{i+1}" for i in range(len(questions))])
+## 🔧 الأدوات المستخدمة
+- Python (Pandas, Matplotlib)
+- Jupyter Notebook
+- مصدر البيانات: [Kaggle Healthcare Dataset](ضيفي الرابط هنا)
 
-def run_survey():
-    print("\n🏥 Hospital Staff Health-Improving Programs – Questionnaire 🏥\n")
-    responses = []
-    for q in questions:
-        answer = input(q)
-        responses.append(answer.strip())
-    
-    # Save responses
-    with open(filename, "a", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-        writer.writerow(responses)
-    
-    print("\n✅ Thank you! Your response has been recorded.\n")
+## 📊 أهم النتائج
+- [اكتبي هنا أهم رسم بياني أو نتيجة توصلتي لها]
+- [مثال: تحليل توزيع الحالات حسب العمر/القسم]
 
-# Run the survey
-if __name__ == "__main__":
-    run_survey()
- python hospital_staff_health_survey.py
-
+## 💡 الخلاصة
+[جملة أو اتنين عن أهم حاجة اتعلمتيها من المشروع ده]
