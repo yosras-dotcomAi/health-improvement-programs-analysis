@@ -50,7 +50,6 @@ Patients enrolled in the Health Improvement Program showed consistently better t
 ```
 health-improvement-programs-analysis/
 ├── health_improvement_programs_data.csv   # Full dataset (500 patients)
-├── generate_data.py                       # Synthetic data generation script
 ├── analyze.py                             # Analysis + chart generation script
 ├── summary_results.csv                    # Summary comparison table
 ├── chart_metrics_comparison.png
