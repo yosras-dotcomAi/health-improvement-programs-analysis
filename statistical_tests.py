@@ -2,11 +2,13 @@
 Statistical tests for the Health Improvement Programs Analysis
 --------------------------------------------------------------
 Input : health_improvement_programs_data.csv  (SYNTHETIC data)
-Output: statistical_results.csv
+Output: statistical_results.csv, adherence_results.csv
 
 1. Baseline balance: are the two groups similar before the program?
 2. Change from baseline: Welch t-test, 95% confidence interval, Cohen's d.
 3. 90-day readmission: chi-square test.
+4. Dose-response: among participants, does higher adherence go with
+   greater improvement? (A real program would be expected to show this.)
 """
 
 import numpy as np
@@ -62,4 +64,19 @@ table = pd.crosstab(df["program_participant"], df["readmitted_90d"])
 _, p_readmit, _, _ = stats.chi2_contingency(table)
 print(f"\n90-DAY READMISSION: chi-square p = {p_readmit:.2g}")
 
-print("\nDone: statistical_results.csv saved.")
+# ---------- 4. Adherence vs improvement (participants only) ----------
+print("\nADHERENCE VS CHANGE (participants only, Pearson correlation)")
+enrolled = df[participants]
+dose_rows = []
+for name, (base, follow) in metrics.items():
+    change = enrolled[follow] - enrolled[base]
+    r, p = stats.pearsonr(enrolled["program_adherence_pct"], change)
+    dose_rows.append({"Metric": name, "Correlation_r": round(r, 2),
+                      "p_value": round(p, 3)})
+    print(f"  {name:25s} r = {r:5.2f}   p = {p:.3f}")
+
+pd.DataFrame(dose_rows).to_csv("adherence_results.csv", index=False)
+print("  Note: r near 0 means higher adherence does not go with more "
+      "improvement.")
+
+print("\nDone: statistical_results.csv and adherence_results.csv saved.")
