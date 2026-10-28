@@ -2,12 +2,14 @@
 Statistical tests for the Health Improvement Programs Analysis
 --------------------------------------------------------------
 Input : health_improvement_programs_data.csv  (SYNTHETIC data)
-Output: statistical_results.csv, adherence_results.csv
+Output: statistical_results.csv, adjusted_results.csv, adherence_results.csv
 
 1. Baseline balance: are the two groups similar before the program?
 2. Change from baseline: Welch t-test, 95% confidence interval, Cohen's d.
 3. 90-day readmission: chi-square test.
-4. Dose-response: among participants, does higher adherence go with
+4. Adjusted analysis (ANCOVA): follow-up value compared between groups after
+   adjusting for the baseline value and age.
+5. Dose-response: among participants, does higher adherence go with
    greater improvement? (A real program would be expected to show this.)
 """
 
@@ -64,7 +66,37 @@ table = pd.crosstab(df["program_participant"], df["readmitted_90d"])
 _, p_readmit, _, _ = stats.chi2_contingency(table)
 print(f"\n90-DAY READMISSION: chi-square p = {p_readmit:.2g}")
 
-# ---------- 4. Adherence vs improvement (participants only) ----------
+# ---------- 4. Adjusted analysis (ANCOVA) ----------
+# follow-up = intercept + group + baseline value + age
+print("\nADJUSTED DIFFERENCE (ANCOVA: adjusted for baseline value and age)")
+adj_rows = []
+for name, (base, follow) in metrics.items():
+    X = np.column_stack([
+        np.ones(len(df)),
+        participants.astype(float),
+        df[base].to_numpy(),
+        df["age"].to_numpy(),
+    ])
+    y = df[follow].to_numpy()
+    beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+    resid = y - X @ beta
+    dof = len(y) - X.shape[1]
+    cov = (resid @ resid / dof) * np.linalg.inv(X.T.dot(X))
+    se = np.sqrt(cov[1, 1])
+    p = 2 * stats.t.sf(abs(beta[1] / se), dof)
+    adj_rows.append({
+        "Metric": name,
+        "Adjusted_difference": round(beta[1], 2),
+        "CI_95_low": round(beta[1] - 1.96 * se, 2),
+        "CI_95_high": round(beta[1] + 1.96 * se, 2),
+        "p_value": float(f"{p:.2g}"),
+    })
+
+adjusted = pd.DataFrame(adj_rows)
+print(adjusted.to_string(index=False))
+adjusted.to_csv("adjusted_results.csv", index=False)
+
+# ---------- 5. Adherence vs improvement (participants only) ----------
 print("\nADHERENCE VS CHANGE (participants only, Pearson correlation)")
 enrolled = df[participants]
 dose_rows = []
@@ -76,7 +108,8 @@ for name, (base, follow) in metrics.items():
     print(f"  {name:25s} r = {r:5.2f}   p = {p:.3f}")
 
 pd.DataFrame(dose_rows).to_csv("adherence_results.csv", index=False)
-print("  Note: r near 0 means higher adherence does not go with more "
-      "improvement.")
+print("  Note: all four metrics are expected to fall, so a negative r means "
+      "higher adherence goes with a bigger reduction.")
 
-print("\nDone: statistical_results.csv and adherence_results.csv saved.")
+print("\nDone: statistical_results.csv, adjusted_results.csv and "
+      "adherence_results.csv saved.")
