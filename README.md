@@ -3,7 +3,7 @@
 ## 🇬🇧 English
 
 ### 📋 Overview
-This project analyzes and compares health outcomes between patients who participated in a hospital-run **Health Improvement Program (HIP)** and a matched group of patients who did not participate. The goal is to quantify whether structured program participation is associated with measurable improvements in key clinical indicators.
+This project analyzes and compares health outcomes between patients who participated in a hospital-run **Health Improvement Program (HIP)** and a comparison group of patients who did not participate. The goal is to quantify whether structured program participation is associated with measurable improvements in key clinical indicators.
 
 > **Note on data:** This analysis uses a **synthetic dataset** (500 simulated patient records) built to reflect realistic clinical patterns, created for portfolio and methodology-demonstration purposes. No real patient data is used.
 
@@ -42,7 +42,7 @@ Compare baseline vs. follow-up changes in BMI, blood pressure, HbA1c, and LDL ch
 <img src="chart_readmission_rate.png" alt="Readmission rate chart" width="450"/> <img src="chart_bmi_trajectory.png" alt="BMI trajectory chart" width="450"/>
 
 ### 💡 Conclusion
-Patients enrolled in the Health Improvement Program showed consistently better trends across all four clinical markers compared to non-participants, alongside a notably lower 90-day readmission rate. These patterns are consistent with the kind of impact structured chaperoned health programs are expected to have — supporting the case for continued investment and wider rollout, pending validation on real clinical data.
+In this simulated dataset, participants improved more than non-participants on all four clinical markers (BMI, systolic BP, HbA1c, LDL) and had a lower 90-day readmission rate. The two groups were similar at baseline, and every difference was statistically significant (see `statistical_tests.py`). However, these effects are built into the simulation by design, so they demonstrate the analytical method, not a real program result. The effect sizes are also much larger than most real programs achieve, which is another reason to treat the numbers as illustrative.
 
 **Limitations:** This is a synthetic, illustrative dataset — it demonstrates the analytical approach, not a real clinical outcome. A production version would require IRB-approved real patient data, adjustment for confounders (e.g., baseline severity, comorbidities), and statistical significance testing.
 
@@ -51,6 +51,7 @@ Patients enrolled in the Health Improvement Program showed consistently better t
 health-improvement-programs-analysis/
 ├── health_improvement_programs_data.csv   # Full dataset (500 patients)
 ├── analyze.py                             # Analysis + chart generation script
+├── statistical_tests.py                   # Baseline balance, t-tests, CIs, effect sizes
 ├── summary_results.csv                    # Summary comparison table
 ├── chart_metrics_comparison.png
 ├── chart_readmission_rate.png
@@ -59,7 +60,7 @@ health-improvement-programs-analysis/
 ```
 
 ### 📌 Project Status
-Phase 1 complete — data pipeline, comparison analysis, and visualizations. Next: statistical significance testing (t-tests) and Power BI interactive dashboard.
+Phase 2 complete: data pipeline, comparison analysis, visualizations, and statistical significance testing (`statistical_tests.py`). Next: adherence-vs-improvement check, a data-generation script, and a Power BI interactive dashboard.
 
 ### 📫 Author
 **Yosra El Nagar** — Nursing Supervisor transitioning into Healthcare Data Analytics
