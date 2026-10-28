@@ -41,6 +41,22 @@ Compare baseline vs. follow-up changes in BMI, blood pressure, HbA1c, and LDL ch
 
 <img src="chart_readmission_rate.png" alt="Readmission rate chart" width="450"/> <img src="chart_bmi_trajectory.png" alt="BMI trajectory chart" width="450"/>
 
+### 🧪 Statistical Tests
+Run `statistical_tests.py` to reproduce these results.
+
+- **Baseline balance:** the two groups were similar before the program on age, BMI, systolic BP, HbA1c, and LDL (all p > 0.05).
+- **Change from baseline** (participants minus non-participants):
+
+| Metric | Difference | 95% CI | Cohen's d | p-value |
+|---|---|---|---|---|
+| BMI (kg/m²) | −1.94 | −2.17 to −1.72 | −1.50 | < 0.001 |
+| Systolic BP (mmHg) | −9.86 | −11.18 to −8.54 | −1.31 | < 0.001 |
+| HbA1c (%) | −0.76 | −0.86 to −0.67 | −1.40 | < 0.001 |
+| LDL Cholesterol (mg/dL) | −13.10 | −15.47 to −10.74 | −0.98 | < 0.001 |
+
+- **90-day readmission:** the difference between groups is statistically significant (chi-square p < 0.001).
+- **Adherence check:** among participants, program adherence shows almost no relationship with improvement (correlation between 0.00 and 0.05, all p > 0.45). In a real program, higher adherence would normally go with greater improvement, so this is another sign that the effect in this dataset is built in by design.
+
 ### 💡 Conclusion
 In this simulated dataset, participants improved more than non-participants on all four clinical markers (BMI, systolic BP, HbA1c, LDL) and had a lower 90-day readmission rate. The two groups were similar at baseline, and every difference was statistically significant (see `statistical_tests.py`). However, these effects are built into the simulation by design, so they demonstrate the analytical method, not a real program result. The effect sizes are also much larger than most real programs achieve, which is another reason to treat the numbers as illustrative.
 
@@ -60,7 +76,7 @@ health-improvement-programs-analysis/
 ```
 
 ### 📌 Project Status
-Phase 2 complete: data pipeline, comparison analysis, visualizations, and statistical significance testing (`statistical_tests.py`). Next: adherence-vs-improvement check, a data-generation script, and a Power BI interactive dashboard.
+Phase 2 complete: data pipeline, comparison analysis, visualizations, and statistical significance testing (`statistical_tests.py`). Next: a data-generation script and a Power BI interactive dashboard.
 
 ### 📫 Author
 **Yosra El Nagar** — Nursing Supervisor transitioning into Healthcare Data Analytics
@@ -106,13 +122,20 @@ Phase 2 complete: data pipeline, comparison analysis, visualizations, and statis
 - **متوسط الالتزام بالبرنامج:** 78.1%
 - **متوسط رضا المرضى:** 7.7 من 10
 
+### 🧪 الاختبارات الإحصائية
+شغّل الملف `statistical_tests.py` لإعادة إنتاج النتائج دي.
+
+- **التوازن في البداية:** المجموعتين كانوا متشابهين قبل البرنامج في العمر وBMI والضغط وHbA1c وLDL (كل قيم p أكبر من 0.05).
+- **التغيّر عن القياس الأساسي:** كل الفروق في المؤشرات الأربعة دالة إحصائيًا (p أقل من 0.001)، وكمان الفرق في معدل إعادة الدخول خلال 90 يوم.
+- **فحص الالتزام:** وسط المشاركين، الالتزام بالبرنامج مالوش علاقة تقريبًا بالتحسن (الارتباط بين 0.00 و0.05). في برنامج حقيقي المفروض اللي يلتزم أكتر يتحسن أكتر، وده دليل إضافي إن الأثر في البيانات دي مدمج في المحاكاة نفسها.
+
 ### 💡 الخلاصة
-المرضى المسجّلين في برنامج تحسين الصحة أظهروا اتجاهات أفضل باستمرار عبر المؤشرات الأربعة الطبية مقارنة بغير المشاركين، بالإضافة لمعدل إعادة دخول أقل بشكل ملحوظ خلال 90 يوم. النتائج دي بتدعم فكرة الاستمرار في الاستثمار بالبرنامج وتوسيعه، على أن يتم التحقق منها ببيانات سريرية حقيقية.
+في البيانات الوهمية دي، المشاركين اتحسنوا أكتر من غير المشاركين في المؤشرات الأربعة، وكان معدل إعادة الدخول عندهم أقل. المجموعتين كانوا متشابهين في البداية، وكل الفروق دالة إحصائيًا (راجع `statistical_tests.py`). لكن الأثر ده مدمج في المحاكاة نفسها، فهو بيوضح المنهج التحليلي مش نتيجة برنامج حقيقي. وحجم الأثر أكبر بكتير من اللي بتحققه معظم البرامج الحقيقية.
 
 **القيود:** البيانات دي وهمية وتوضيحية — بتعرض المنهج التحليلي مش نتيجة سريرية حقيقية. أي نسخة فعلية هتحتاج بيانات مرضى حقيقية معتمدة، وضبط للعوامل المربكة (زي شدة الحالة الأساسية والأمراض المصاحبة)، واختبار الدلالة الإحصائية.
 
 ### 📌 حالة المشروع
-المرحلة الأولى خلصت — خط أنابيب البيانات، تحليل المقارنة، والرسومات البيانية. الخطوة الجاية: اختبار الدلالة الإحصائية (t-test) وداشبورد تفاعلي على Power BI.
+المرحلة التانية خلصت — خط أنابيب البيانات، تحليل المقارنة، الرسومات البيانية، والاختبارات الإحصائية. الخطوة الجاية: سكربت لتوليد البيانات وداشبورد تفاعلي على Power BI.
 
 ### 📫 التواصل
 **يسرى النجار** — مشرفة تمريض في رحلة انتقال لتحليل البيانات الصحية
