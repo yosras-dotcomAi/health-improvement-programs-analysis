@@ -1,99 +1,137 @@
-"""
-Health Improvement Programs Analysis
-------------------------------------
-Compares clinical outcomes between patients who joined a Health Improvement
-Program (HIP) and those who did not, using a SYNTHETIC dataset (no real
-patient data).
-
-Input : health_improvement_programs_data.csv
-Output: summary_results.csv, chart_metrics_comparison.png,
-        chart_readmission_rate.png, chart_bmi_trajectory.png
-"""
-
+"""Statistical analysis: naive vs covariate-adjusted vs propensity-matched effects."""
+import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+import statsmodels.formula.api as smf
+from scipy import stats
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from statsmodels.stats.multitest import multipletests
 
-DATA_FILE = "health_improvement_programs_data.csv"
+import generate_data as gd
 
-METRICS = {
-    "BMI (kg/m2)": ("baseline_bmi", "followup_bmi"),
-    "Systolic BP (mmHg)": ("baseline_systolic_bp", "followup_systolic_bp"),
-    "HbA1c (%)": ("baseline_hba1c", "followup_hba1c"),
-    "LDL Cholesterol (mg/dL)": ("baseline_ldl", "followup_ldl"),
-}
+METRICS = {"bmi": "BMI (kg/m²)", "sbp": "Systolic BP (mmHg)",
+           "hba1c": "HbA1c (%)", "ldl": "LDL cholesterol (mg/dL)"}
+COVARS = "age + C(gender) + C(department) + comorbidity_score"
 
-# ---------- 1. Load ----------
-df = pd.read_csv(DATA_FILE)
-df["group"] = df["program_participant"].map({"Yes": "Participants", "No": "Non-Participants"})
 
-# ---------- 2. Change from baseline to follow-up ----------
-for name, (base, follow) in METRICS.items():
-    df[f"change_{base}"] = df[follow] - df[base]
+def load_data(path) -> pd.DataFrame:
+    df = pd.read_csv(path)
+    for m in METRICS:
+        df[f"{m}_change"] = df[f"{m}_followup"] - df[f"{m}_baseline"]
+    return df
 
-rows = []
-for name, (base, follow) in METRICS.items():
-    change = df.groupby("group")[f"change_{base}"].mean()
-    rows.append({
-        "Metric": name,
-        "Participants": round(change["Participants"], 2),
-        "Non-Participants": round(change["Non-Participants"], 2),
-        "Difference": round(change["Participants"] - change["Non-Participants"], 2),
-    })
 
-summary = pd.DataFrame(rows)
-summary.to_csv("summary_results.csv", index=False)
-print(summary.to_string(index=False))
+def add_changes(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    for m in METRICS:
+        df[f"{m}_change"] = df[f"{m}_followup"] - df[f"{m}_baseline"]
+    return df
 
-# ---------- 3. Readmission, adherence, satisfaction ----------
-readmit = df.groupby("group")["readmitted_90d"].mean() * 100
-print(f"\n90-day readmission: Participants {readmit['Participants']:.1f}% | "
-      f"Non-Participants {readmit['Non-Participants']:.1f}% | "
-      f"Gap {readmit['Non-Participants'] - readmit['Participants']:.1f} points")
 
-participants = df[df["group"] == "Participants"]
-print(f"Average adherence: {participants['program_adherence_pct'].mean():.1f}%")
-print(f"Average satisfaction: {participants['satisfaction_score_10'].mean():.1f} / 10")
+def _ols(df, y, extra=""):
+    f = f"{y} ~ participant" + (f" + {extra}" if extra else "")
+    r = smf.ols(f, df).fit(cov_type="HC3")
+    lo, hi = r.conf_int().loc["participant"]
+    return r.params["participant"], lo, hi, r.pvalues["participant"]
 
-# ---------- 4. Charts ----------
-colors = {"Participants": "#2a9d8f", "Non-Participants": "#b0b0b0"}
 
-# Chart 1: change in each metric
-fig, axes = plt.subplots(1, 4, figsize=(14, 4))
-for ax, (name, (base, _)) in zip(axes, METRICS.items()):
-    vals = df.groupby("group")[f"change_{base}"].mean()
-    ax.bar(vals.index, vals.values, color=[colors[g] for g in vals.index])
-    ax.set_title(name, fontsize=10)
-    ax.axhline(0, color="black", linewidth=0.8)
-    ax.tick_params(axis="x", labelrotation=15)
-fig.suptitle("Average Change from Baseline to Follow-up")
-plt.tight_layout()
-plt.savefig("chart_metrics_comparison.png", dpi=150)
-plt.close()
+def _logit(df, extra=""):
+    f = "readmit_90d ~ participant" + (f" + {extra}" if extra else "")
+    r = smf.logit(f, df).fit(disp=0)
+    lo, hi = r.conf_int().loc["participant"]
+    return float(np.exp(r.params["participant"])), float(np.exp(lo)), float(np.exp(hi)), r.pvalues["participant"]
 
-# Chart 2: readmission rate
-fig, ax = plt.subplots(figsize=(5, 4))
-order = ["Participants", "Non-Participants"]
-ax.bar(order, [readmit[g] for g in order], color=[colors[g] for g in order])
-for i, g in enumerate(order):
-    ax.text(i, readmit[g] + 0.5, f"{readmit[g]:.1f}%", ha="center")
-ax.set_ylabel("Readmission rate (%)")
-ax.set_title("90-Day Readmission Rate")
-plt.tight_layout()
-plt.savefig("chart_readmission_rate.png", dpi=150)
-plt.close()
 
-# Chart 3: BMI baseline vs follow-up
-fig, ax = plt.subplots(figsize=(5, 4))
-for g in order:
-    sub = df[df["group"] == g]
-    ax.plot(["Baseline", "Follow-up"],
-            [sub["baseline_bmi"].mean(), sub["followup_bmi"].mean()],
-            marker="o", label=g, color=colors[g])
-ax.set_ylabel("Mean BMI (kg/m2)")
-ax.set_title("BMI Trajectory")
-ax.legend()
-plt.tight_layout()
-plt.savefig("chart_bmi_trajectory.png", dpi=150)
-plt.close()
+def propensity_match(df, caliper_sd=0.2, seed=42):
+    """1:1 nearest-neighbour matching on the propensity score, without replacement."""
+    X = pd.get_dummies(df[["age", "gender", "department", "comorbidity_score"]],
+                       drop_first=True).astype(float)
+    Xs = StandardScaler().fit_transform(X)
+    ps = LogisticRegression(max_iter=1000).fit(Xs, df.participant).predict_proba(Xs)[:, 1]
+    ps = np.clip(ps, 1e-4, 1 - 1e-4)
+    logit = np.log(ps / (1 - ps))
+    caliper = caliper_sd * logit.std()
+    rng = np.random.default_rng(seed)
+    treated = rng.permutation(np.where(df.participant.values == 1)[0])
+    pool = list(np.where(df.participant.values == 0)[0])
+    pairs = []
+    for t in treated:
+        if not pool:
+            break
+        d = np.abs(logit[pool] - logit[t])
+        j = int(np.argmin(d))
+        if d[j] <= caliper:
+            pairs += [t, pool.pop(j)]
+    return df.iloc[pairs].copy(), X
 
-print("\nDone: summary_results.csv and 3 charts saved.")
+
+def smd_table(before, matched, X):
+    """Standardised mean differences (participants - non-participants) before/after matching."""
+    rows = []
+    for name in X.columns:
+        def smd(d):
+            xs = X.loc[d.index, name]
+            a, b = xs[d.participant == 1], xs[d.participant == 0]
+            sd = np.sqrt((a.var() + b.var()) / 2)
+            return (a.mean() - b.mean()) / sd if sd > 0 else 0.0
+        rows.append({"covariate": name, "before": smd(before), "after": smd(matched)})
+    return pd.DataFrame(rows)
+
+
+def run_all(df: pd.DataFrame) -> dict:
+    df = df.reset_index(drop=True)
+    if "bmi_change" not in df:
+        df = add_changes(df)
+    matched, X = propensity_match(df)
+    truth = gd.true_effects(df)
+    rows = []
+    for m, label in METRICS.items():
+        y = f"{m}_change"
+        for method, d, extra in [("Naive", df, ""),
+                                 ("Adjusted", df, f"{COVARS} + {m}_baseline"),
+                                 ("Matched", matched, "")]:
+            est, lo, hi, p = _ols(d, y, extra)
+            rows.append(dict(outcome=label, key=m, method=method, estimate=est,
+                             lo=lo, hi=hi, p=p, true=truth[m]))
+    for method, d, extra in [("Naive", df, ""),
+                             ("Adjusted", df, f"{COVARS} + bmi_baseline + sbp_baseline"),
+                             ("Matched", matched, "")]:
+        est, lo, hi, p = _logit(d, extra)
+        rows.append(dict(outcome="90-day readmission (odds ratio)", key="readmit",
+                         method=method, estimate=est, lo=lo, hi=hi, p=p, true=truth["readmit"]))
+    eff = pd.DataFrame(rows)
+    # share of the true effect recovered (100% = unbiased)
+    cont = eff.key != "readmit"
+    eff["pct_of_true"] = eff.estimate / eff.true * 100
+    eff.loc[~cont, "pct_of_true"] = (np.log(eff.loc[~cont, "estimate"])
+                                     / np.log(eff.loc[~cont, "true"]) * 100)
+    # Holm correction across the 5 adjusted tests
+    adj = eff.method == "Adjusted"
+    eff["p_holm"] = np.nan
+    eff.loc[adj, "p_holm"] = multipletests(eff.loc[adj, "p"], method="holm")[1]
+    return dict(effects=eff, matched=matched, smd=smd_table(df, matched, X),
+                table1=table1(df), readmit=readmit_rates(df), data=df)
+
+
+def table1(df):
+    g = df.groupby("participant")
+    out = pd.DataFrame({
+        "Non-participants": [f"{df[df.participant==0].age.mean():.1f}",
+                             f"{(df[df.participant==0].gender=='Female').mean()*100:.0f}%",
+                             f"{df[df.participant==0].comorbidity_score.mean():.2f}"],
+        "Participants": [f"{df[df.participant==1].age.mean():.1f}",
+                         f"{(df[df.participant==1].gender=='Female').mean()*100:.0f}%",
+                         f"{df[df.participant==1].comorbidity_score.mean():.2f}"]},
+        index=["Mean age (years)", "Female (%)", "Mean comorbidity score"])
+    for m, label in METRICS.items():
+        means = g[f"{m}_baseline"].mean()
+        out.loc[f"Baseline {label}"] = [f"{means.loc[0]:.2f}", f"{means.loc[1]:.2f}"]
+    out.loc["n"] = [str(int((df.participant == 0).sum())), str(int((df.participant == 1).sum()))]
+    return out
+
+
+def readmit_rates(df):
+    r = df.groupby("participant").readmit_90d.agg(["mean", "sum", "count"])
+    tab = pd.crosstab(df.participant, df.readmit_90d)
+    p = stats.fisher_exact(tab.values)[1] if tab.shape == (2, 2) else np.nan
+    return dict(rate_part=r.loc[1, "mean"], rate_non=r.loc[0, "mean"], fisher_p=p)
