@@ -1,105 +1,76 @@
+"""Synthetic data generator for the Health Improvement Program (HIP) analysis.
+
+The generator plants a KNOWN program effect and a realistic CONFOUNDER:
+healthier (lower comorbidity) patients are more likely to enrol, and sicker
+patients drift towards worse values anyway. A naive participant vs
+non-participant comparison therefore overstates the benefit, which lets us
+show how adjustment and matching recover the true effect.
 """
-Synthetic data generator for the Health Improvement Programs Analysis
----------------------------------------------------------------------
-Creates 500 SIMULATED patient records (no real patient data) and saves them to
-health_improvement_programs_data.csv.
-
-Design assumptions (all invented for demonstration):
-  - 260 program participants, 240 non-participants, similar at baseline.
-  - Program effect is MODEST and grows with adherence (dose-response):
-    at average adherence, roughly -0.7 BMI, -4 mmHg SBP, -0.4 HbA1c, -8 LDL.
-  - Both groups have natural drift and regression to the mean.
-  - Patient-level noise is large, as in real clinical data.
-  - 90-day readmission risk depends on age and HbA1c, and is lowered by
-    program adherence.
-
-Change SEED to create a different random dataset.
-"""
-
 import numpy as np
 import pandas as pd
 
-SEED = 42
-N_PARTICIPANTS = 260
-N_CONTROLS = 240
+TRUE_EFFECTS = {"bmi": -1.5, "sbp": -8.0, "hba1c": -0.6, "ldl": -12.0}  # change units
+TRUE_READMIT_LOG_OR = -0.9  # odds ratio ~ 0.41 at reference adherence
+DOSE_REF = 78.0             # adherence (%) at which the full effect applies
+DEPARTMENTS = ["Cardiology", "Endocrinology", "Internal Medicine", "Family Medicine"]
 
-rng = np.random.default_rng(SEED)
-n = N_PARTICIPANTS + N_CONTROLS
 
-# ---------- Patient characteristics ----------
-program = np.array(["Yes"] * N_PARTICIPANTS + ["No"] * N_CONTROLS)
-is_participant = program == "Yes"
+def _sigmoid(x):
+    return 1 / (1 + np.exp(-x))
 
-age = np.clip(rng.normal(54, 12, n).round(), 22, 88).astype(int)
-gender = rng.choice(["Male", "Female"], n)
-department = rng.choice(
-    ["Cardiology", "Endocrinology", "Internal Medicine", "Family Medicine"],
-    n, p=[0.32, 0.24, 0.22, 0.22],
-)
 
-# ---------- Baseline measurements ----------
-baseline_bmi = np.clip(rng.normal(31.5, 5.0, n), 19, 45)
-baseline_sbp = np.clip(rng.normal(137, 14, n), 102, 175)
-baseline_hba1c = np.clip(rng.normal(7.4, 1.1, n), 5.0, 10.5)
-baseline_ldl = np.clip(rng.normal(135, 28, n), 70, 210)
+def generate(n: int = 2000, seed: int = 42, selection_strength: float = 0.7,
+             drift: float = 0.25) -> pd.DataFrame:
+    """selection_strength: how strongly low severity predicts enrolment (0 = random).
+    drift: how much sicker patients worsen on their own (0 = no confounding via outcomes)."""
+    rng = np.random.default_rng(seed)
+    age = np.clip(rng.normal(55, 12, n), 25, 90).round().astype(int)
+    gender = rng.choice(["Female", "Male"], n)
+    dept = rng.choice(DEPARTMENTS, n, p=[0.25, 0.25, 0.30, 0.20])
+    severity = np.clip(rng.normal(0, 1, n) + (age - 55) / 25, -3, 4)  # comorbidity z-score
 
-# ---------- Program participation ----------
-months_enrolled = np.where(is_participant, rng.integers(6, 13, n), 0)
-adherence = np.where(
-    is_participant, np.clip(rng.normal(70, 22, n), 20, 100).round(), np.nan
-)
-adherence_frac = np.nan_to_num(adherence / 100.0)       # 0 for non-participants
-exposure = adherence_frac                               # 0 to 1
+    base = {
+        "bmi": np.clip(rng.normal(30 + 0.8 * severity, 4.5), 18, 50),
+        "sbp": rng.normal(135 + 4 * severity, 14),
+        "hba1c": np.clip(rng.normal(7.4 + 0.35 * severity, 1.0), 5, 13),
+        "ldl": rng.normal(130 + 6 * severity, 25),
+    }
+    participant = rng.binomial(1, _sigmoid(-0.2 - selection_strength * severity))
+    adherence = np.where(participant == 1, np.clip(rng.normal(78, 12, n), 30, 100), np.nan)
+    dose = np.nan_to_num(adherence / DOSE_REF, nan=0.0)
 
-# ---------- Follow-up: drift + regression to the mean + program effect + noise
-def follow_up(baseline, drift, regression, effect, noise_sd, lo, hi):
-    change = (drift
-              - regression * (baseline - baseline.mean())
-              + effect * exposure
-              + rng.normal(0, noise_sd, n))
-    return np.clip(baseline + change, lo, hi)
+    noise = {"bmi": 1.2, "sbp": 7.0, "hba1c": 0.4, "ldl": 10.0}
+    natural = {"bmi": 0.3, "sbp": 1.0, "hba1c": 0.1, "ldl": 0.5}  # average natural drift
+    scale = {"bmi": 1.0, "sbp": 6.0, "hba1c": 0.35, "ldl": 8.0}   # drift per severity unit
+    data = {
+        "patient_id": np.arange(1, n + 1), "age": age, "gender": gender,
+        "department": dept, "comorbidity_score": severity.round(3),
+        "participant": participant, "adherence_pct": adherence.round(1),
+        "followup_months": rng.integers(6, 13, n),
+    }
+    for m in TRUE_EFFECTS:
+        change = (TRUE_EFFECTS[m] * dose + natural[m] + drift * scale[m] * severity
+                  + rng.normal(0, noise[m], n))
+        data[f"{m}_baseline"] = base[m].round(2)
+        data[f"{m}_followup"] = (base[m] + change).round(2)
 
-followup_bmi = follow_up(baseline_bmi, 0.15, 0.05, -1.0, 1.2, 17, 50)
-followup_sbp = follow_up(baseline_sbp, 1.0, 0.15, -5.7, 11.0, 95, 185)
-followup_hba1c = follow_up(baseline_hba1c, 0.08, 0.10, -0.57, 0.55, 4.8, 12)
-followup_ldl = follow_up(baseline_ldl, 1.0, 0.10, -11.4, 20.0, 55, 230)
+    logit = -1.6 + 0.6 * severity + 0.01 * (age - 55) + TRUE_READMIT_LOG_OR * dose
+    data["readmit_90d"] = rng.binomial(1, _sigmoid(logit))
+    sat = np.clip(rng.normal(7.7, 1.2, n), 1, 10).round(1)
+    data["satisfaction_score"] = np.where(participant == 1, sat, np.nan)
+    return pd.DataFrame(data)
 
-# ---------- Satisfaction (participants only, loosely tied to adherence) ----
-satisfaction = np.where(
-    is_participant,
-    np.clip((adherence_frac * 4 + 4.5 + rng.normal(0, 1.2, n)).round(), 1, 10),
-    np.nan,
-)
 
-# ---------- 90-day readmission (logistic model) ----------
-logit = (-2.0
-         + 0.02 * (age - 54)
-         + 0.35 * (baseline_hba1c - 7.4)
-         - 1.2 * adherence_frac)
-prob = 1 / (1 + np.exp(-logit))
-readmitted = (rng.random(n) < prob).astype(int)
+def true_effects(df: pd.DataFrame) -> dict:
+    """Planted average effect among participants (scaled by their actual adherence)."""
+    dose = (df.loc[df.participant == 1, "adherence_pct"] / DOSE_REF).mean()
+    out = {m: v * dose for m, v in TRUE_EFFECTS.items()}
+    out["readmit"] = float(np.exp(TRUE_READMIT_LOG_OR * dose))  # odds ratio
+    return out
 
-# ---------- Assemble and save ----------
-df = pd.DataFrame({
-    "patient_id": [f"P{1000 + i}" for i in range(n)],
-    "age": age,
-    "gender": gender,
-    "department": department,
-    "program_participant": program,
-    "months_enrolled": months_enrolled,
-    "baseline_bmi": baseline_bmi.round(1),
-    "followup_bmi": followup_bmi.round(1),
-    "baseline_systolic_bp": baseline_sbp.round(0),
-    "followup_systolic_bp": followup_sbp.round(0),
-    "baseline_hba1c": baseline_hba1c.round(1),
-    "followup_hba1c": followup_hba1c.round(1),
-    "baseline_ldl": baseline_ldl.round(0),
-    "followup_ldl": followup_ldl.round(0),
-    "program_adherence_pct": adherence,
-    "satisfaction_score_10": satisfaction,
-    "readmitted_90d": readmitted,
-})
 
-df = df.sample(frac=1, random_state=SEED).reset_index(drop=True)
-df.to_csv("health_improvement_programs_data.csv", index=False)
-print(f"Saved {len(df)} synthetic patients to health_improvement_programs_data.csv")
+if __name__ == "__main__":
+    df = generate(n=2000)
+    df.to_csv("data/health_improvement_programs_data.csv", index=False)
+    print(f"Saved {len(df)} synthetic patients "
+          f"({int(df.participant.sum())} participants) to data/")
